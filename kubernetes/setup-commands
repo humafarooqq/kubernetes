@@ -1,0 +1,83 @@
+Kubernetes
+Master Node
+Step 1:
+swapoff -a #disables the swap space
+Step2:
+Install Docker Engine
+apt-get update #updates upgrades and new package installations
+apt-get install ca-certificates curl # install CA certificates & curl utility used for downloading files over HTTP.
+install -m 0755 -d /etc/apt/keyrings #creates a directory for storing GPG keys
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc    #downloads docker gpg key & saves to keyrings directory
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null    
+ #adds docker repository to APT sources list
+
+apt-get update
+ #updates package lists again from newly added docker repository
+apt-get install docker-ce 
+#install docker engine
+Step3:
+Install GO language
+wget https://go.dev/dl/go1.22.5.linux-amd64.tar.gz
+  # downloads the GO programming language tarball
+
+tar -C /usr/local -xzf go1.22.5.linux-amd64.tar.gz  
+#extracts the GO tarball to the /usr/local directory
+
+export PATH=$PATH:/usr/local/go/bin  
+ #add the GO binary directory to the system's Path environment variable.
+
+go version  #Displays the installed version of Go to verify that the installation was successful.
+Step4:
+Install CRI-Docker
+git clone https://github.com/Mirantis/cri-dockerd.git   #Clones the cri-dockerd repository from GitHub.
+cd cri-dockerd   #Changes the current directory to the cloned cri-dockerd directory.
+mkdir -p /usr/local/bin   #creates the directory if it doesnt exist
+mkdir bin #creates bin directory inside cri-dockerd directory
+go build -o bin/cri-dockerd  #Builds the cri-dockerd binary and places it in the bin directory.
+install -o root -g root -m 0755 bin/cri-dockerd /usr/local/bin/cri-dockerd   #Installs the cri-dockerd binary to /usr/local/bin with the correct permissions.
+install packaging/systemd/* /etc/systemd/system  #Installs systemd service files from the packaging/systemd/ directory to the system's systemd configuration directory.
+
+sed -i -e 's,/usr/bin/cri-dockerd,/usr/local/bin/cri-dockerd,' /etc/systemd/system/cri-docker.service   #modifies the systemd service file to point to the correct location of the cri-dockerd binary
+
+systemctl daemon-reload  #reloads systemd to apply changes made to unit files
+systemctl enable --now cri-docker.socket #enables and starts the cri-dockerd socket service
+Step5:
+Install Kubernetes Components
+apt-get update #updates the package lists again 
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg    #downloads the kubernetes GPG key and stores it in /etc/apt/keyrings/kubernetes-apt-keyring.gpg.
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
+#Adds the Kubernetes repository to the APT sources
+apt-get package #updates the package again to include kubernetes repository
+apt-get install -y kubelet kubeadm kubectl
+#Installs the Kubernetes components: kubelet, kubeadm, and kubectl.
+Step 6:
+Cluster Initialisation
+kubeadm init --pod-network-cidr=192.168.0.0/16 --cri-socket=unix:///var/run/cri-dockerd.sock
+#Initializes the Kubernetes control plane with the specified Pod network CIDR range and specifies the CRI socket to use.
+Step 7:
+Set Up kubectl for Your User:
+
+mkdir -p $HOME/.kube
+#Creates the .kube directory in the user's home directory.
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+#Copies the Kubernetes configuration file to the user's .kube directory.
+chown $(id -u):$(id -g) $HOME/.kube/config
+#Changes the ownership of the copied configuration file to the current user.
+Step 8:
+Apply Calico Networking:
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.1/manifests/tigera-operator.yaml
+#Creates the Calico operator deployment in the Kubernetes cluster.
+curl https://raw.githubusercontent.com/projectcalico/calico/v3.28.1/manifests/custom-resources.yaml -O
+#Downloads the Calico custom resources manifest.
+kubectl create -f custom-resources.yaml
+#Creates the Calico custom resources in the Kubernetes cluster.
+
+
+Worker  Node
+Install Docker Engine: (Follow the same steps as on the master node to install Docker.)
+Install CRI-Docker: (Follow the same steps as on the master node to install CRI-Docker.)
+Install Kubernetes Components: (Follow the same steps as on the master node to install Kubernetes components.)
+Join the Worker Node to the Cluster: Run the kubeadm join command provided at the end of the kubeadm init output on the master node:
+kubeadm join 10.2.0.4:6443 --token <token> --discovery-token-ca-cert-hash <discovery-token-hash> --cri-socket=unix:///var/run/cri-dockerd.sock
+
+
